@@ -1,0 +1,141 @@
+#!/bin/bash -x
+# Based on anontymous "rht-vmctl" script overview
+# Modifications: Ricardo David Carrillo Sanchez
+action=$(echo $1| tr "[[:upper:]]" "[[:lower:]]")
+machinet=$(echo $2| tr "[[:upper:]]" "[[:lower:]]")
+dominio="example.com"
+templates="/home/ricardo.carrillo/Virtual_Machines/"
+xml_path="/etc/libvirt/qemu/"
+xml_storage="/etc/libvirt/storage/"
+xml_tpl_nv="${xml_path}plantilla-nvm.xml"
+nkvm="kvm.${dominio}"
+LOG="/tmp/log"
+w="\e[97m"
+r="\e[91m"
+y="\e[93m"
+g="\e[32m"
+c="\e[36m"
+d="\e[m"
+u="\e[4m"
+
+function resetNewMachine {
+	$nueva=$1
+	if [ ! -z $nueva ]; then
+		cd $templates && rm -f ${templates}/kvm-new-snap.ovl && rm -f ${xml_path}$nueva.xml \
+		&& virsh undefine $nueva 2>> $LOG && virsh destroy $nueva 2>> $LOG
+		cp -vap ${xml_tpl_nv} ${xml_path}$nueva.xml >> $LOG\
+		&& sed -i -e "s/plantilla-nueva-maquina/$nueva\.${dominio}/g" ${xml_path}$nueva.xml \
+		&& sed -i -e "s/8672d132-8688-4f82-a1d7-55ce8c02f1a6/$(uuidgen)/g" ${xml_path}$nueva.xml \
+		&& sed -i -e "s/random.qcow2/kvm-new-snap\.ovl/g" ${xml_path}kvm-new.xml
+		cd $templates && qemu-img create -f qcow2 -b ${templates}random.qcow2 ${templates}kvm-new-snap.ovl >> $LOG\
+		&& virsh define ${xml_path}$nueva.xml 2>> $LOG&& virsh start --domain $nueva.${dominio} 2>> $LOG
+		viewNewMachine $nueva.${dominio}
+	else
+		helpCmd
+	fi
+}
+
+function createNewServer {
+        if [[ ! -z $nueva || $nueva != "" ]]; then
+		nameMachXML=$xml_tpl_nv
+		nameServer="$nueva.${dominio}"
+		nameServerTPL="plantilla-nueva-maquina"
+		cd $templates && virt-clone --original ${nameServerTPL} --name ${nameServer} --auto-clone && virsh start --domain ${nameServer} 2>>$LOG
+		#sleep 20 && echo -e "${w}Maquina:${d} ${y}${nameServer}${d} ${w}cuenta con IP:${d} ${g}$(detectIP)${d}"
+		viewNewMachine ${nameServer}
+        else
+                helpCmd
+        fi
+
+}
+function viewNewMachine(){
+       $nueva=$1
+        if [[ ! -z $nueva || $nueva != "" ]]; then
+	        nomDomainS=$(virsh list --all | egrep -i -e "$nueva.${dominio}" | awk '{print $3}')
+        	if [[ "$nomDomainS" = "apagado" ]] ; then
+                	virsh start $(echo $nueva.${dominio}) >>$LOG && virt-viewer --domain-name $nueva.${dominio} 2>/dev/null >> $LOG &
+	        else
+        	        virt-viewer --domain-name $nueva.${dominio} 2>/dev/null >> $LOG &
+	        fi
+	else
+		helpCmd
+	fi
+}
+
+function detectIP(){
+	nameserver=$1
+	if [ ! -z "$uuid" ] ; then
+		for i in $(sudo virsh net-dhcp-leases default | awk '{print $5}' | egrep -v "(^$|Pro)" | awk -F"/" '{print $1}') ; do
+			getIP=$(ping -c1 $i -W1 | egrep -B1 " 0% packet loss"|awk '{print $2}' | grep -v packets)
+			echo $getIP
+		done
+	fi
+}
+
+
+function  helpCmd {
+	echo -e "${w}Usage: ${y}$(basename $0)${d} ${c}view${d}${r} ${w}${u}new-machine${d}${r} |[${d}${g}add-disk${d}${r}|${d}${g}reset${d}${r}|${g}view ${r}${w}${u}new-machine${d}${r}]${d}"
+
+}
+
+function helpOption {
+	arg=$(echo $1|tr "[:upper:]" "[:lower:]")
+	if [ ! -z $1 ] ; then
+		case $arg in
+			reset|view)
+				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}${r}"
+				;;
+				new)
+				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}${r}"
+				;;
+				add-disk)
+				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}${r}|${d}${w}${u}server${d}${r}|${d}${w}${u}guest${d}"
+				;;
+				*)
+					helpCmd
+				;;
+		esac
+		echo -e ${response}
+	fi
+}
+
+function addDisk(){
+	mv=$1
+	diskLetter=$(tr -cd '[:lower:]' < /dev/urandom | fold -w1 | head -n1)
+	disco="$mv-san-$diskLetter.img"
+	xml="${xml_storage}$mv-$diskLetter.xml"
+	qemu-img create -f raw ${templates}/$disco 1G
+	echo "<disk type='block' device='disk'>" > $xml
+	echo "<driver name='qemu' type='raw' cache='none'/>">> $xml
+	echo "<source dev='${templates}/$disco'/>">> $xml
+	echo "<target dev='vdc' bus='virtio'/>">> $xml
+	echo "</disk>">> $xml
+	virsh attach-disk ${mv} ${templates}/$disco vd$diskLetter && echo "Disco  vd$diskLetter adjuntado"
+}
+
+nueva=$2
+if [[ "$action" != "" && "$machinet" != "" && $nueva != "" ]] ; then
+	if [[ "$action" = "reset" ]] ; then
+		if [[ "$machinet" = "new" && $nueva != "" ]] ; then
+			resetNewMachine $nueva
+		else
+			helpOption $action
+		fi
+	elif [[ "$action" = "view" ]] ; then
+		if [[ "$machinet" = "new" && $nueva != "" ]] ; then
+			viewServer $nueva
+		elif [ ! -z "$machinet" ] ; then
+			helpOption $action
+		fi
+	elif [[ "$action" = "new" && $nueva != "" ]] ; then
+		createNewServer $nueva
+	else
+		helpOption $action
+	fi
+elif [[ "$action" = "new" && $nueva != "" ]] ; then
+	createNewServer $nueva
+elif [[ "$action" != "" && "$machinet" = "" ]] ; then
+	helpOption $action
+else
+	helpCmd
+fi
