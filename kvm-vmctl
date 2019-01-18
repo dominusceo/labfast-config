@@ -1,4 +1,4 @@
-#!/bin/bash -x
+#!/bin/bash
 # Based on anontymous "rht-vmctl" script overview
 # Modifications: Ricardo David Carrillo Sanchez
 action=$(echo $1| tr "[[:upper:]]" "[[:lower:]]")
@@ -17,7 +17,6 @@ g="\e[32m"
 c="\e[36m"
 d="\e[m"
 u="\e[4m"
-
 function resetNewMachine {
 	$nueva=$1
 	if [ ! -z $nueva ]; then
@@ -49,13 +48,13 @@ function createNewServer {
 
 }
 function viewNewMachine(){
-       $nueva=$1
+       nueva=$1
         if [[ ! -z $nueva || $nueva != "" ]]; then
-	        nomDomainS=$(virsh list --all | egrep -i -e "$nueva.${dominio}" | awk '{print $3}')
+	        nomDomainS=$(virsh list --all | egrep -i -e "$nueva" | awk '{print $3}')
         	if [[ "$nomDomainS" = "apagado" ]] ; then
-                	virsh start $(echo $nueva.${dominio}) >>$LOG && virt-viewer --domain-name $nueva.${dominio} 2>/dev/null >> $LOG &
+                	virsh start $nueva >>$LOG && virt-viewer --domain-name $nueva 2>/dev/null >> $LOG &
 	        else
-        	        virt-viewer --domain-name $nueva.${dominio} 2>/dev/null >> $LOG &
+        	        virt-viewer --domain-name $nueva 2>/dev/null >> $LOG &
 	        fi
 	else
 		helpCmd
@@ -72,7 +71,6 @@ function detectIP(){
 	fi
 }
 
-
 function  helpCmd {
 	echo -e "${w}Usage: ${y}$(basename $0)${d} ${c}view${d}${r} ${w}${u}new-machine${d}${r} |[${d}${g}add-disk${d}${r}|${d}${g}reset${d}${r}|${g}view ${r}${w}${u}new-machine${d}${r}]${d}"
 
@@ -83,10 +81,10 @@ function helpOption {
 	if [ ! -z $1 ] ; then
 		case $arg in
 			reset|view)
-				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}${r}"
+				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}"
 				;;
 				new)
-				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}${r}"
+				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}${r}${d}"
 				;;
 				add-disk)
 				response="${w}Usage: ${y}$(basename $0)${d} ${g}${arg}${d} ${w}${u}new-machine${d}${r}|${d}${w}${u}server${d}${r}|${d}${w}${u}guest${d}"
@@ -116,26 +114,14 @@ function addDisk(){
 nueva=$2
 if [[ "$action" != "" && "$machinet" != "" && $nueva != "" ]] ; then
 	if [[ "$action" = "reset" ]] ; then
-		if [[ "$machinet" = "new" && $nueva != "" ]] ; then
-			resetNewMachine $nueva
-		else
-			helpOption $action
-		fi
+		resetNewMachine $nueva
 	elif [[ "$action" = "view" ]] ; then
-		if [[ "$machinet" = "new" && $nueva != "" ]] ; then
-			viewServer $nueva
-		elif [ ! -z "$machinet" ] ; then
-			helpOption $action
-		fi
-	elif [[ "$action" = "new" && $nueva != "" ]] ; then
+		viewNewMachine $nueva
+	elif [[ "$action" = "new" ]] ; then
 		createNewServer $nueva
 	else
 		helpOption $action
 	fi
-elif [[ "$action" = "new" && $nueva != "" ]] ; then
-	createNewServer $nueva
-elif [[ "$action" != "" && "$machinet" = "" ]] ; then
-	helpOption $action
 else
 	helpCmd
 fi
